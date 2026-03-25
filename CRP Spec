@@ -1,0 +1,637 @@
+# CRP: Cognitive Resolution Protocol
+## Specification v0.2.0 — March 2026
+## ERA HQ Inc.
+ 
+---
+ 
+## Status: DRAFT
+## Authors: Anthony Holley (ERA HQ Inc.)
+## License: Apache 2.0
+ 
+---
+ 
+# 1. Abstract
+ 
+The Cognitive Resolution Protocol (CRP) is an application-layer standard (OSI Layer 7) for multi-threaded cognitive perception in AI systems. CRP defines how an AI agent's internal cognitive modules collectively interpret a single observation to produce meaning — where MCP (Anthropic) defines how agents access tools and A2A (Google) defines how agents communicate with each other, CRP defines how an agent thinks about what it sees.
+ 
+CRP is inspired by Global Workspace Theory (Baars, 1988) from neuroscience, the leading scientific model of conscious perception. It extends GWT in five ways:
+ 
+1. A **two-tier perception hierarchy**: sensory systems that produce rich, general-purpose output, and cognitive modules that interpret those outputs through specialized lenses
+2. **Memory as infrastructure**: memory is not a queryable peer module but a substrate that primes all cognitive processing with contextually relevant history, analogous to how hippocampal priming operates in biological cognition
+3. **Affective pre-processing**: an emotional evaluation layer that runs before cognitive classification, biasing module priorities in real-time
+4. **Twin-specific priority learning**: module weights learned from observing individual human behavior
+5. **Instinct signals**: modules can signal partial relevance detection without full interpretation, creating persistent signals that resolve across observation cycles
+ 
+CRP is transport-agnostic. It can run on a local event bus (in-process), over HTTP/WebSocket between microservices, or across distributed systems. The reference implementation uses a TypeScript event bus within an Electron desktop application.
+ 
+---
+ 
+# 2. Motivation
+ 
+Current AI agents perceive in a single thread. An observation enters, a model interprets it, an action exits. One input, one model, one interpretation. This is processing, not perception.
+ 
+Biological perception operates fundamentally differently. When a human looks at a screen, the visual cortex processes spatial layout, the amygdala evaluates threat level, the hippocampus retrieves relevant memories, the prefrontal cortex identifies the task, and the anterior cingulate cortex monitors for errors — all simultaneously, all communicating directly with each other.
+ 
+Current AI architectures match neither the parallelism nor the intercommunication of biological perception:
+ 
+**Orchestrator-centric**: A central LLM receives all input, decides what to do, and produces output. Everything flows through the center. This is analogous to routing all network traffic through a single server.
+ 
+**Pipeline-linear**: Information flows through a fixed sequence (capture → classify → store → respond). Each step produces one output that feeds the next. This flattens multi-dimensional interpretation into a single label.
+ 
+**Multi-agent**: Independent agents coordinate on tasks. Agents are autonomous entities that negotiate. They do not share sensory context, affect state, or working memory. This is inter-agent architecture, not intra-agent cognition.
+ 
+CRP addresses a gap none of these architectures fill: how a single intelligent agent should perceive — process a single observation through multiple simultaneous interpretive frames that share context, communicate directly, and collectively produce meaning.
+ 
+---
+ 
+# 3. Terminology
+ 
+| Term | Definition |
+|------|-----------|
+| **Sensory System** | A Layer 0 component that receives raw observation data and produces rich, general-purpose structured output. Analogous to a biological sensory organ. Senses transduce; they do not interpret. |
+| **Cognitive Module** | A Layer 2 component that consumes sensory outputs and produces specialized interpretations. Analogous to a cortical processing region. |
+| **Workspace** | The shared communication space through which broadcasts propagate. Analogous to the global workspace in GWT. |
+| **Packet** | A single CRP message. Can be a broadcast, direct message, response, or override. |
+| **Broadcast** | A packet sent to all cognitive modules simultaneously (target = "*"). |
+| **Direct** | A packet sent to a specific module (target = module_id). |
+| **Cycle** | One complete sense → prime → affect → broadcast → response → aggregate loop. One "frame" of conscious processing. |
+| **Salience** | A computed score representing how much attention an observation deserves. |
+| **Consciousness Threshold** | The salience level at which information transitions from background processing to twin-level awareness. Twin-specific and learned. |
+| **Context Frame** | A compact packet of relevant memories assembled by the memory substrate based on sensory outputs. Attached to every broadcast. |
+| **Volatile RAM** | Working memory with channel-dependent decay. Information persists for different durations based on cognitive significance. |
+| **Instinct** | A QUERY response from a module that has detected partial relevance but cannot produce a full interpretation. Persists across cycles until resolved or decayed. |
+| **Affect** | Emotional/perceptual metadata (valence, arousal, familiarity, urgency) that accompanies every broadcast and modulates cognitive module priorities. |
+ 
+---
+ 
+# 4. Architecture Overview
+ 
+CRP organizes perception into layers that mirror biological sensory-cognitive architecture:
+ 
+```
+┌─────────────────────────────────────────────────────────────┐
+│  RAW OBSERVATION (screenshot, screen state, audio, etc.)    │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+               ┌───────────▼───────────┐
+               │   LAYER 0: SENSES     │  Parallel, fast, general-purpose
+               │                       │
+               │  Visual    Textual    │  Each sense produces structured
+               │  Temporal  Contextual │  output from raw observation
+               │  Auditory             │
+               └───────────┬───────────┘
+                           │ sensory outputs
+               ┌───────────▼───────────┐
+               │ LAYER 0.5: MEMORY     │  Automatic context priming
+               │   CONTEXT PRIMING     │
+               │                       │  Assembles relevant history
+               │  Episodic retrieval   │  based on sensory outputs
+               │  Pattern matching     │
+               │  Instinct recall      │
+               └───────────┬───────────┘
+                           │ sensory + memory context
+               ┌───────────▼───────────┐
+               │  LAYER 1: AFFECT      │  Emotional pre-processing
+               │                       │
+               │  Valence  Arousal     │  Generates affect from senses
+               │  Familiarity Urgency  │  + memory context
+               └───────────┬───────────┘
+                           │ sensory + memory + affect
+               ┌───────────▼───────────┐
+               │  LAYER 2: COGNITION   │  Parallel broadcast to all
+               │                       │  cognitive modules
+               │  Safety   Task        │
+               │  Anomaly  Intent      │  Each receives full context:
+               │  Learning Compliance  │  sensory + memory + affect
+               │  Social   Domain      │
+               └───────────┬───────────┘
+                           │ responses (assertion/query/null/override/resolve)
+               ┌───────────▼───────────┐
+               │  LAYER 3: MEMORY      │  Post-cycle storage
+               │   FORMATION           │
+               │                       │  Salience-weighted encoding
+               │  Channel assignment   │  Affect-colored decay rates
+               │  Decay configuration  │
+               └───────────────────────┘
+```
+ 
+Key architectural principle: **senses are general and stable; cognition is specialized and extensible.** Sensory systems change rarely and serve all cognitive consumers. Cognitive modules specialize by domain, multiply per vertical, and can be deployed independently. This creates a natural deployment boundary: senses run locally (fast heuristics), cognition can run anywhere.
+ 
+---
+ 
+# 5. Layer 0: Sensory Systems
+ 
+Sensory systems receive raw observation data and produce structured, general-purpose output. They transduce — they do not interpret. A sensory system that detects a red indicator reports "dominant color: red, intensity: high" — it does not report "error detected." Interpretation is the cognitive layer's job.
+ 
+## 5.1 Reference Sensory Systems
+ 
+| Sense | Input | Output | Sub-Components |
+|-------|-------|--------|----------------|
+| **Visual** | Screenshot/pixels | Color distribution, layout structure, element density, icon/badge presence, modal detection, change delta from prior frame | Color analyzer, spatial layout classifier, element detector, change detector |
+| **Textual** | Extracted text / OCR | Entity list (names, dates, numbers, codes), structural patterns (form, table, prose, code), information density, language register (clinical, casual, formal), anomalous fragments | Entity recognizer, structure classifier, density estimator, register detector |
+| **Temporal** | Timestamps, intervals | Time-on-page, click velocity, navigation rhythm, session duration, time-of-day bucket, pace deviation from user baseline | Pace tracker, rhythm analyzer, session profiler |
+| **Contextual** | App metadata, URL, title | App identity, app category, workspace/project context, navigation state, URL parameters, tab count | App classifier, workspace detector, nav state tracker |
+| **Auditory** | Audio stream / transcript | Speech transcription, speaker count, ambient noise level, conversation vs. monologue, emotional prosody, keyword detection | Transcriber, speaker diarizer, prosody analyzer |
+ 
+## 5.2 Sensory Output Contract
+ 
+Each sensory system MUST produce a structured output conforming to:
+ 
+```typescript
+interface SensoryOutput {
+  sense_id: string;           // e.g., "visual", "textual", "temporal"
+  timestamp: string;          // ISO 8601
+  observation_id: string;     // Links to the triggering observation
+  data: Record<string, any>;  // Sense-specific structured output
+  confidence: number;         // 0.0-1.0, overall confidence in the output
+  processing_time_ms: number; // How long transduction took
+}
+```
+ 
+## 5.3 Sensory System Requirements
+ 
+- Sensory systems MUST run in parallel (not sequentially)
+- Sensory systems MUST complete within their declared timeout (recommended: <100ms)
+- Sensory systems MUST NOT interpret — they report what they detect, not what it means
+- Sensory systems MUST produce output even when input is sparse (with lower confidence)
+- Sensory systems SHOULD be stateless or minimally stateful (history for familiarity comparison is acceptable)
+ 
+---
+ 
+# 6. Layer 0.5: Memory Context Priming
+ 
+Memory is not a module. Memory is infrastructure.
+ 
+In biological cognition, the hippocampus does not wait for requests from the prefrontal cortex. It automatically primes relevant episodic memories when contextual cues arrive. Walking into a familiar room triggers recall before any conscious effort to remember. Memory is distributed through the same neural tissue that performs perception and reasoning.
+ 
+CRP elevates memory to a substrate that operates at three points in every cycle:
+ 
+## 6.1 Pre-Load (Before Broadcast)
+ 
+After sensory systems produce their outputs, the memory substrate assembles a **Context Frame**: a compact packet of relevant memories selected based on the current sensory picture.
+ 
+The Contextual Sense reports "we are in CheckpointEHR, CP Central dashboard." Memory retrieves:
+- Last N observations from this application
+- Known workflow patterns for this context
+- Unresolved instinct signals associated with this app/screen
+- Recent anomaly flags
+- User preferences relevant to this context
+ 
+This Context Frame is attached to the broadcast packet. Every cognitive module receives it automatically without requesting it.
+ 
+```typescript
+interface ContextFrame {
+  recent_observations: ObservationSummary[];  // Last N for this context
+  active_patterns: PatternSummary[];          // Known workflows/habits
+  unresolved_instincts: InstinctSummary[];    // Pending QUERY signals
+  recent_anomalies: AnomalySummary[];         // Recent flags
+  relevant_preferences: PreferenceSummary[];  // User-specific context
+  priming_confidence: number;                 // How relevant the pre-load is
+  assembly_time_ms: number;                   // Priming latency
+}
+```
+ 
+## 6.2 On-Demand Retrieval (During Broadcast)
+ 
+During the cognitive broadcast cycle, a module may need something specific that was not in the pre-loaded Context Frame. The Anomaly module detects an unusual billing code and queries: "Have I seen this specific code reject before?"
+ 
+On-demand queries include the requesting module's full context (sensory data, affect state, preliminary interpretation) so that Memory can scope the search appropriately. Memory returns a relevance-scored subset, not the full store.
+ 
+Two search modes:
+ 
+**Semantic search**: "What do I know that is conceptually related?" Uses embedding similarity. Expensive, suitable for cloud execution.
+ 
+**Episodic search**: "What happened the last time I was in this exact situation?" Uses contextual matching (same app, same screen, similar time-of-day). Faster, suitable for local volatile RAM.
+ 
+## 6.3 Memory Formation (After Cycle)
+ 
+After the workspace completes salience computation, Memory decides what to store from the cycle's results:
+ 
+- **Salience determines encoding strength**: High-salience observations are stored with high initial strength. Low-salience observations may not be stored at all.
+- **Affect determines decay rate**: Observations with high emotional weight (arousal, negative valence) get slower decay — mirroring the neuroscience finding that emotionally charged experiences consolidate more readily into long-term memory.
+- **Channel determines context**: Task observations go in the task channel, anomalies in the anomaly channel, overrides in the audit channel. Each channel has independent decay parameters.
+ 
+---
+ 
+# 7. Packet Format
+ 
+Every CRP message conforms to the following schema:
+ 
+```typescript
+interface CRPPacket {
+  // ─── Identity ─────────────────────────────────────
+  packet_id: string;          // UUID v4, unique per packet
+  cycle_id: string;           // UUID v4, groups all packets in one cycle
+  timestamp: string;          // ISO 8601 with milliseconds
+ 
+  // ─── Routing ──────────────────────────────────────
+  type: PacketType;           // "broadcast" | "direct" | "response" | "override" | "resolve"
+  source_module: string;      // ID of sending module (or "workspace" for broadcasts)
+  target_module: string;      // "*" for broadcast, specific module_id for direct
+ 
+  // ─── Context ──────────────────────────────────────
+  observation_id: string;     // UUID of the triggering observation
+  twin_id: string;            // UUID of the twin this packet belongs to
+ 
+  // ─── Payload ──────────────────────────────────────
+  payload: any;               // Module-specific content
+  sensory_context: Record<string, SensoryOutput>;  // All sensory outputs (v0.2.0)
+  memory_context: ContextFrame;                     // Pre-loaded memory (v0.2.0)
+ 
+  // ─── Affect ───────────────────────────────────────
+  affect: AffectContext;      // Emotional metadata (REQUIRED on broadcasts)
+ 
+  // ─── Priority & Lifecycle ─────────────────────────
+  priority: number;           // 0.0-1.0
+  ttl: number;                // Time-to-live in cycles. 0 = this cycle only. -1 = persist until resolved.
+  response_type?: ResponseType;
+ 
+  // ─── Memory Tagging ───────────────────────────────
+  memory_channel?: MemoryChannel;
+  decay_hint?: DecayHint;
+}
+```
+ 
+## 7.1 PacketType
+ 
+```typescript
+type PacketType =
+  | "broadcast"   // Sent to all cognitive modules (target = "*")
+  | "direct"      // Sent to a specific module
+  | "response"    // Reply to a broadcast or direct
+  | "override"    // High-priority interrupt that preempts normal processing
+  | "resolve"     // Resolves a previously issued QUERY (instinct resolution)
+```
+ 
+## 7.2 ResponseType
+ 
+```typescript
+type ResponseType =
+  | "assertion"   // Confident interpretation: "This is step 4 of payroll"
+  | "query"       // Partial match / instinct: "Something looks off, need history"
+  | "null"        // Not relevant. MUST NOT consume significant resources.
+  | "override"    // Emergency preemption: "PHI detected — block NOW"
+  | "resolve"     // Answering a previous query: "Here is the requested history"
+```
+ 
+### Response Type Semantics
+ 
+**ASSERTION**: The module has a confident interpretation. Includes a confidence score (0.0-1.0). Assertions contribute to salience accumulation and may be stored in volatile RAM.
+ 
+**QUERY (Instinct)**: The module detected a partial pattern match but lacks sufficient context for a full assertion. A QUERY persists across cycles as an "instinct." It includes a description of what additional information would resolve it. Other modules may respond with RESOLVE packets. Queries are stored in the `instinct` memory channel with no time-based decay — they persist until resolved or explicitly dismissed.
+ 
+**NULL**: The observation is not relevant to this module. The module MUST NOT consume significant resources processing a null response. Null responses are not stored or propagated.
+ 
+**OVERRIDE**: A safety-critical signal that preempts normal processing. Override packets are processed before all other responses. Only modules registered with `can_override: true` may issue overrides. Overrides trigger immediate action without waiting for the full cycle to complete. All overrides are stored in the `override` memory channel for audit.
+ 
+**RESOLVE**: A response to a previously issued QUERY. References the original query's `packet_id`. When a QUERY receives a RESOLVE, the instinct is either promoted to an ASSERTION (if the resolution confirms relevance) or discarded.
+ 
+## 7.3 AffectContext
+ 
+```typescript
+interface AffectContext {
+  valence: number;      // -1.0 (negative/threatening) to 1.0 (positive/safe)
+  arousal: number;      // 0.0 (calm/routine) to 1.0 (activated/urgent)
+  familiarity: number;  // 0.0 (novel/unexpected) to 1.0 (known pattern)
+  urgency: number;      // 0.0 (can wait) to 1.0 (immediate action required)
+}
+```
+ 
+The workspace uses affect to dynamically adjust cognitive module priority weights before distributing the broadcast. Under negative valence + high arousal (threat), safety modules receive boosted priority. Under high familiarity + low arousal (routine), learning modules receive boosted priority. The specific adjustments are twin-specific and learned (see Section 10).
+ 
+## 7.4 MemoryChannel
+ 
+```typescript
+type MemoryChannel =
+  | "task"        // Active task context.     Half-life: ~10 minutes.
+  | "anomaly"     // Detected anomalies.      Half-life: ~1 hour.
+  | "instinct"    // Unresolved instincts.    No time decay. TTL or resolution only.
+  | "learning"    // Pattern candidates.      Half-life: ~30 minutes.
+  | "peripheral"  // Low-salience background. Half-life: ~1 minute.
+  | "override"    // Safety/privacy overrides. Half-life: ~24 hours. Audit trail.
+```
+ 
+## 7.5 DecayHint
+ 
+```typescript
+interface DecayHint {
+  initial_strength: number;          // 0.0-1.0
+  decay_function: "exponential" | "linear" | "step";
+  half_life_ms: number;
+  promote_threshold?: number;        // If strength rises above this via recalls, promote
+  emotional_weight?: number;         // High emotional events decay slower
+}
+```
+ 
+---
+ 
+# 8. Workspace Behavior — The 10-Step Cycle
+ 
+Each observation triggers one CRP cycle. Steps 1-3 are pre-broadcast. Steps 4-7 are the broadcast cycle. Steps 8-10 are post-broadcast.
+ 
+```
+Step 1:  Sensory Transduction    — All senses process raw observation in parallel
+Step 2:  Memory Context Priming  — Memory assembles Context Frame from sensory outputs
+Step 3:  Affect Pre-Processing   — Generate emotional context from senses + memory
+Step 4:  Priority Adjustment     — Adjust cognitive module priorities using affect + twin weights
+Step 5:  Broadcast               — Send packet to all cognitive modules (parallel, per-module timeout)
+Step 6:  Override Check          — Process any OVERRIDE responses immediately (short-circuit)
+Step 7:  Salience Computation    — Aggregate ASSERTION responses into weighted salience score
+Step 8:  Consciousness Gate      — Compare salience to twin-specific threshold
+Step 9:  Memory Formation        — Store significant results in volatile RAM (channel + decay)
+Step 10: Instinct Management     — Check for resolutions, decay expired instincts
+```
+ 
+### Step 5 Detail: Parallel Broadcast
+ 
+All cognitive modules receive the broadcast simultaneously via `Promise.allSettled` (or equivalent). Each module has a declared `max_response_time_ms`. If a module exceeds its timeout, its response is discarded for this cycle (it returns NULL implicitly). One slow module MUST NOT block others.
+ 
+### Step 6 Detail: Override Short-Circuit
+ 
+If ANY response has `response_type: "override"`, the cycle short-circuits:
+1. Override is logged to the `override` memory channel
+2. All other responses are still collected but salience is set to 1.0
+3. The override action takes effect immediately (e.g., block upload, alert user)
+ 
+### Step 7 Detail: Salience Computation
+ 
+```
+salience = Σ (response.priority × twin_weight[response.source_module] × response.confidence)
+           for all responses where response_type ≠ "null"
+           
+salience = min(salience, 1.0)
+```
+ 
+If overrides are present: `salience = 1.0` (overrides always reach consciousness).
+ 
+---
+ 
+# 9. Module Registration
+ 
+Both sensory systems and cognitive modules register with the workspace using:
+ 
+```typescript
+interface CRPModuleRegistration {
+  module_id: string;                    // Unique ID, e.g., "era.core.safety"
+  module_type: ModuleType;              // Classification
+  layer: "sense" | "affect" | "cognition";  // Which architectural layer (v0.2.0)
+  subscribes_to: ("broadcast" | "direct")[];
+  direct_channels: string[];            // Module IDs this module can send DIRECT to
+  can_override: boolean;                // Only true for safety-critical modules
+  max_response_time_ms: number;
+  default_priority: number;             // 0.0-1.0, before affect/twin modulation
+  affect_sensitivity: AffectSensitivity;
+  capabilities: string[];               // For discovery/debugging
+  required_context: string[];           // Sensory outputs this module needs
+}
+```
+ 
+```typescript
+type ModuleType =
+  | "sense"       // Layer 0: sensory transduction
+  | "affect"      // Layer 1: emotional pre-processing
+  | "safety"      // Layer 2: can override (privacy, compliance)
+  | "task"        // Layer 2: workflow identification
+  | "anomaly"     // Layer 2: deviation detection
+  | "learning"    // Layer 2: pattern identification
+  | "domain"      // Layer 2: vertical-specific (clinical, finance, legal)
+  | "intent"      // Layer 2: goal inference
+  | "social"      // Layer 2: collaboration context
+```
+ 
+---
+ 
+# 10. Volatile RAM Specification
+ 
+## 10.1 Structure
+ 
+```typescript
+interface VolatileRAMEntry {
+  key: string;              // Unique identifier
+  channel: MemoryChannel;
+  packet: CRPPacket;        // The response that generated this entry
+  strength: number;         // 0.0-1.0, decays over time
+  created_at: string;
+  last_recalled_at: string; // Updated on each retrieval
+  recall_count: number;     // Retrieval strengthens memory
+  emotional_weight: number; // From affect context at time of storage
+}
+```
+ 
+## 10.2 Decay Computation
+ 
+```
+strength(t) = initial_strength × decay_factor(t) × (1 + emotional_weight × 0.5)
+ 
+Where decay_factor depends on decay_function:
+  exponential: 0.5 ^ (t / half_life_ms)
+  linear:      max(0, 1 - t / (2 × half_life_ms))
+  step:        1.0 if t < half_life_ms, else 0.0
+ 
+And t = now - max(created_at, last_recalled_at)
+ 
+Recall strengthening: On each recall, half_life_ms *= 1.5
+```
+ 
+## 10.3 Promotion to Long-Term Memory
+ 
+A volatile RAM entry is promoted when ANY of:
+1. `recall_count >= promote_threshold` (default: 3)
+2. `emotional_weight >= 0.8`
+3. The entry was associated with an error correction or behavior change
+4. The entry was explicitly flagged for retention
+ 
+## 10.4 Garbage Collection
+ 
+Entries with `strength < 0.05` are eligible for GC. GC runs at the end of each cycle. Entries in the `instinct` channel are exempt until their TTL expires or they are resolved.
+ 
+---
+ 
+# 11. Twin-Specific Priority Learning
+ 
+Module priority weights are not static. They are learned from observing the individual user:
+ 
+1. **Attention correlation**: What the user looks at, clicks on, and spends time on after an observation
+2. **Error correlation**: When the user corrects something, which module would have caught it?
+3. **Stress indicators**: Under time pressure, which modules does the user implicitly prioritize?
+4. **Override frequency**: How often does the user override the twin's suggestions?
+ 
+```typescript
+interface TwinPriorityWeights {
+  twin_id: string;
+  weights: Record<string, number>;                    // module_id → weight (0.0-1.0)
+  affect_modifiers: Record<string, AffectSensitivity>; // Per-module affect sensitivity
+  consciousness_threshold: number;                     // 0.0-1.0, learned
+  stress_profile: "focused" | "vigilant" | "impulsive" | "methodical";
+  last_updated: string;
+}
+```
+ 
+---
+ 
+# 12. Reference Implementation
+ 
+The ERA AI reference implementation includes:
+ 
+### Sensory Systems (Layer 0)
+| Sense | Timeout | Implementation |
+|-------|---------|---------------|
+| Visual | <50ms | Heuristic color/layout analysis |
+| Textual | <50ms | Regex entity extraction + structure classification |
+| Temporal | <10ms | Timestamp math + pace tracking |
+| Contextual | <10ms | App name + URL + title parsing |
+| Auditory | <200ms | Whisper transcription (when active) |
+ 
+### Cognitive Modules (Layer 2)
+| Module ID | Type | Override | Timeout | Function |
+|-----------|------|----------|---------|----------|
+| `era.core.safety` | safety | Yes | <100ms | PHI/PII detection + credential exposure. Merges v0.1.0's privacy and compliance. |
+| `era.core.task` | task | No | <200ms | Workflow identification + step tracking |
+| `era.core.anomaly` | anomaly | No | <500ms | Deviation detection + instinct generation |
+| `era.core.learning` | learning | No | <1000ms | Pattern identification + promotion |
+| `era.core.intent` | intent | No | <300ms | Goal inference beyond workflow identification |
+| `era.core.social` | social | No | <300ms | Team/collaboration context |
+| `era.core.domain` | domain | No | <500ms | Vertical-specific knowledge (clinical, finance, etc.) |
+ 
+---
+ 
+# 13. Transport
+ 
+CRP is transport-agnostic:
+ 
+- **In-process event bus**: TypeScript EventEmitter for modules in the same process (reference implementation)
+- **HTTP/REST**: For cloud-hosted modules. Higher latency, suitable for non-time-critical cognition.
+- **WebSocket**: For modules running as separate local processes
+- **gRPC**: For high-throughput production deployments
+ 
+The transport layer MUST preserve packet ordering within a single cycle. Packets from different cycles MAY arrive out of order.
+ 
+### Deployment Topology
+ 
+| Mode | Senses | Memory | Affect | Cognition |
+|------|--------|--------|--------|-----------|
+| **Full Local** | Local | Local RAM | Local | Local |
+| **Hybrid** | Local | Local + Cloud | Local | Cloud |
+| **Full Cloud** | Cloud | Cloud (Redis) | Cloud | Cloud |
+ 
+In Hybrid mode, sensory systems and affect run locally. Cognitive modules run in the cloud, receiving compact sensory context (structured data, not raw pixels) as input.
+ 
+---
+ 
+# 14. Security Considerations
+ 
+- Modules MUST NOT modify packets from other modules
+- OVERRIDE capability MUST be restricted to explicitly authorized modules
+- Raw observation data (screenshots) MUST NOT be included in packets transmitted over network transports. Only structured sensory outputs may cross network boundaries.
+- The memory substrate MUST encrypt PHI-containing entries at rest
+- Third-party modules MUST declare data handling practices in registration
+- The workspace MUST log all OVERRIDE actions for audit
+- Module execution MUST be sandboxed — a misbehaving module cannot crash the workspace
+ 
+---
+ 
+# 15. Changes from v0.1.0
+ 
+| Change | v0.1.0 | v0.2.0 |
+|--------|--------|--------|
+| Architecture | Flat: all modules are peers | Two-tier: senses (Layer 0) + cognition (Layer 2) |
+| Memory | Module (`era.core.memory`) that receives broadcasts | Infrastructure that operates at three cycle points: pre-load, on-demand, formation |
+| Packet format | No sensory context | Includes `sensory_context` and `memory_context` fields |
+| Module registration | No layer designation | Includes `layer` field |
+| Reference modules | 8 peer modules | 5 sensory systems + 7 cognitive modules |
+| Privacy + Compliance | Separate modules | Merged into `era.core.safety` |
+| Cycle steps | 10 steps (no sensory tier) | 10 steps reorganized with explicit sensory + memory priming phases |
+ 
+---
+ 
+# 16. Versioning
+ 
+This specification follows semantic versioning. Current version: 0.2.0 (draft).
+ 
+- **MAJOR**: Breaking changes to packet format or module registration
+- **MINOR**: New packet types, response types, sensory systems, or optional fields
+- **PATCH**: Clarifications, examples, typo fixes
+ 
+---
+ 
+# 17. Future Work
+ 
+- **CRP Discovery Protocol**: Mechanism for modules to discover available modules and capabilities at runtime (analogous to mDNS/DNS-SD)
+- **CRP Federation**: Cross-workspace module communication for team-level cognitive processing
+- **CRP Benchmarking**: Standardized test suite for measuring perception quality and latency
+- **CRP Marketplace**: Registry for third-party cognitive modules
+- **Sensory Composition**: Mechanism for composing new sensory systems from sub-components (reflecting how biological senses like hearing comprise multiple specialized sub-systems)
+ 
+---
+ 
+# Appendix A: Example Cycle (v0.2.0)
+ 
+**Scenario**: User is on CheckpointEHR billing screen with a denied claim showing red indicators.
+ 
+```
+Step 1 — Sensory Transduction (parallel, <50ms total):
+  Visual:     { dominant_color: "red", alert_badges: 2, modal: false, layout: "data_table" }
+  Textual:    { entities: ["Angelita Edgerton", "ICD-10: F32.1", "CPT: 90837", "DENIED"],
+                structure: "table_with_status_column", density: 0.7, register: "clinical" }
+  Temporal:   { time_on_page: 8s, session_duration: 45min, pace: "normal", time_of_day: "afternoon" }
+  Contextual: { app: "CheckpointEHR", page: "CP Central - Billing", workspace: "claims_review" }
+ 
+Step 2 — Memory Context Priming (<20ms):
+  Context Frame:
+    recent: "Last 5 observations were all in CheckpointEHR billing"
+    patterns: "User reviews denied claims Mon/Wed afternoons"
+    instincts: [{ id: "inst-44a", hint: "Modifier issue with this payer — unresolved from yesterday" }]
+    anomalies: "2 claims denied for same payer this week"
+ 
+Step 3 — Affect Pre-Processing:
+  valence: -0.4   (red indicators, "DENIED" text)
+  arousal: 0.6    (action required, elevated density)
+  familiarity: 0.8 (user does this regularly on Wed afternoons)
+  urgency: 0.5    (needs attention, not emergency)
+ 
+Step 4 — Priority Adjustment:
+  era.core.safety:   0.95 → 0.95 (unaffected — always high)
+  era.core.anomaly:  0.60 → 0.78 (boosted by negative valence + unresolved instinct)
+  era.core.task:     0.80 → 0.75 (slightly reduced — familiar context)
+  era.core.domain:   0.50 → 0.65 (boosted — clinical entities detected)
+ 
+Step 5 — Broadcast to all cognitive modules (parallel):
+ 
+Step 6 — Responses:
+  era.core.task:    ASSERTION "Billing review workflow, step: denial investigation"
+                    confidence: 0.85
+  era.core.anomaly: RESOLVE for instinct inst-44a: "This IS the same payer/modifier issue.
+                    Memory confirms: 2 denials this week, both missing modifier 25."
+                    confidence: 0.88
+  era.core.safety:  NULL (no PHI exposure risk on this screen)
+  era.core.domain:  ASSERTION "CPT 90837 with payer BlueCross typically requires modifier 25.
+                    F32.1 diagnosis is appropriate for this service."
+                    confidence: 0.72
+  era.core.learning: ASSERTION "Pattern: this payer denies 90837 without modifier 25.
+                    Seen 3 times in 2 weeks. Recommend skill update."
+                    confidence: 0.65
+ 
+Step 7 — Salience: 0.78 (above threshold of 0.6)
+ 
+Step 8 — Consciousness Gate: REACHED — twin should speak
+ 
+  Twin summary: "This looks like the same modifier 25 issue — BlueCross has denied
+  90837 without it three times now. The domain module confirms modifier 25 is required
+  for this payer/code combination. Want me to add it and resubmit?"
+ 
+Step 9 — Memory Formation:
+  task channel:    "Currently investigating denial #4412" (strength: 0.8, decay: 10min)
+  anomaly channel: "Inst-44a RESOLVED — modifier 25 pattern confirmed" (strength: 0.9, decay: 1hr)
+  learning channel: "Payer X / CPT 90837 / modifier 25 pattern — 3 occurrences" (promote candidate)
+ 
+Step 10 — Instinct Management:
+  inst-44a: RESOLVED and removed from instinct channel
+```
+ 
+---
+ 
+**CRP is an open specification. Contributions, implementations, and module development are welcome.**
+ 
+**Repository**: github.com/erahq/crp-spec (planned)
+**Contact**: anthony@erahq.ai
+**License**: Apache 2.0
